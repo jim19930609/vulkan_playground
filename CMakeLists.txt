@@ -14,12 +14,7 @@ message("Using Vulkan Include Dir: ${Vulkan_INCLUDE_DIRS}")
 message("Using Vulkan Lib: ${Vulkan_LIBRARIES}")
 
 find_package(glm REQUIRED)
-message("Using GLM Include Dir: ${GLM_INCLUDE_DIRS}")
-# target_link_libraries(<your executable> glm::glm)
-
 find_package(glfw3 REQUIRED)
-message("Using GLFW Include Dir: ${GLFW3_INCLUDE_DIRS}")
-# target_link_libraries(myapp glfw)
 
 add_executable(vulkan_app main.cpp)
 target_link_libraries(vulkan_app 
@@ -29,3 +24,6 @@ target_link_libraries(vulkan_app
 target_include_directories(vulkan_app PUBLIC
                            ${Vulkan_LIBRARIES}
                            ${CMAKE_SOURCE_DIR})
+
+execute_process(COMMAND glslc "${CMAKE_SOURCE_DIR}/shaders/shader.frag" -o "${CMAKE_SOURCE_DIR}/shaders/frag.spv")
+execute_process(COMMAND glslc "${CMAKE_SOURCE_DIR}/shaders/shader.vert" -o "${CMAKE_SOURCE_DIR}/shaders/vert.spv")
