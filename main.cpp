@@ -76,7 +76,10 @@ struct Vertex {
     glm::vec2 pos;
     glm::vec3 color;
     glm::vec2 texCoord;
-
+    
+    /*
+        Describe how pipeline should read the vertex stream
+    */
     static VkVertexInputBindingDescription getBindingDescription() {
         VkVertexInputBindingDescription bindingDescription{};
         bindingDescription.binding = 0;
@@ -86,6 +89,7 @@ struct Vertex {
         return bindingDescription;
     }
 
+    // Describe binding information between vertex input and shader positions
     static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions() {
         std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
 
@@ -121,6 +125,8 @@ const std::vector<Vertex> vertices = {
     {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
 };
 
+// 1st triangle: vertex #0, #1, #2
+// 2nd triangle: vertex #2, #3, #0
 const std::vector<uint16_t> indices = {
     0, 1, 2, 2, 3, 0
 };
@@ -244,7 +250,8 @@ private:
         // 3. Dependencies
         createRenderPass();
 
-
+        // Specify binding information for uniform buffers
+        // * Descriptor: similar to Attributes
         createDescriptorSetLayout();
 
         // Create graphics pipeline configurations, consists of:
@@ -263,14 +270,32 @@ private:
         // Create CommandPool for graphics queue family, requires:
         // 1. queue family to be associated with
         createCommandPool();
-
+        
+        // 1. Create VkImage used for Textures
+        // 2. Read in external image from disk
+        // 3. Copy read-in image to VkImage
         createTextureImage();
+        
+        // Create ImageView to specific how VkImages should be read
         createTextureImageView();
+
+        // Create sampler
         createTextureSampler();
+       
+        // 1. Create vertex buffer then allocate memory
+        // 2. Init vertex buffer with CPU data
         createVertexBuffer();
+        
+        // Create index buffer to construct geometries (triangle) from vertex data
         createIndexBuffer();
+        
+        // Create uniform buffer and initialize with CPU data
         createUniformBuffers();
+        
+        // DescriptorPool is used for buffering DescriptorSets, similar to CommandPool - CommandBuffers
         createDescriptorPool();
+
+        // Create VkDescriptorSet from uniform buffer instances and VkDescriptorSetLayout
         createDescriptorSets();
         
         // Create command buffer from specific command pool, requires:
@@ -620,6 +645,8 @@ private:
     }
 
     void createDescriptorSetLayout() {
+        // DescriptorSetLayoutBinding is a submember of DescriptorSetLayout
+        // It describes the position, type of buffer corresponds to the one appeared in the shader stage
         VkDescriptorSetLayoutBinding uboLayoutBinding{};
         uboLayoutBinding.binding = 0;
         uboLayoutBinding.descriptorCount = 1;
@@ -633,7 +660,8 @@ private:
         samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         samplerLayoutBinding.pImmutableSamplers = nullptr;
         samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
+        
+        // Create VkDescriptorSetLayout, this is the ultimate data structure we gonna use
         std::array<VkDescriptorSetLayoutBinding, 2> bindings = {uboLayoutBinding, samplerLayoutBinding};
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -646,6 +674,7 @@ private:
     }
 
     void createGraphicsPipeline() {
+        // Read, compile and create shader stages
         auto vertShaderCode = readFile("shaders/vert.spv");
         auto fragShaderCode = readFile("shaders/frag.spv");
 
@@ -665,11 +694,15 @@ private:
         fragShaderStageInfo.pName = "main";
 
         VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
-
+        
+        // Describe dynamic Vertex input information
         VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
+        
+        // How does pipeline read Vertex Inputs?
         auto bindingDescription = Vertex::getBindingDescription();
+
+        // Specify each offset in Vertex inputs and its correspondant shader position
         auto attributeDescriptions = Vertex::getAttributeDescriptions();
 
         vertexInputInfo.vertexBindingDescriptionCount = 1;
@@ -681,7 +714,8 @@ private:
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         inputAssembly.primitiveRestartEnable = VK_FALSE;
-
+        
+        // Setup fixed functions
         VkPipelineViewportStateCreateInfo viewportState{};
         viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
         viewportState.viewportCount = 1;
@@ -734,7 +768,8 @@ private:
         if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create pipeline layout!");
         }
-
+        
+        // Create graphics pipeline infra
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.stageCount = 2;
@@ -796,6 +831,7 @@ private:
     }
 
     void createTextureImage() {
+        // Read image from disk
         int texWidth, texHeight, texChannels;
         stbi_uc* pixels = stbi_load("textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         VkDeviceSize imageSize = texWidth * texHeight * 4;
@@ -803,22 +839,28 @@ private:
         if (!pixels) {
             throw std::runtime_error("failed to load texture image!");
         }
-
+        
+        // Create staging buffer
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
         createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
+        // Copy read-in image data to staging buffer
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
             memcpy(data, pixels, static_cast<size_t>(imageSize));
         vkUnmapMemory(device, stagingBufferMemory);
 
         stbi_image_free(pixels);
-
+        
+        // Create VkImage instance
         createImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
 
+        // Transform VkImage to specific image layout
         transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-            copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+        // Copy from staging buffer to VkImage
+        copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+        // Transform image layout back
         transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
@@ -981,17 +1023,21 @@ private:
     void createVertexBuffer() {
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
+        // Create staging buffer
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
+        
+        // Copy CPU data to staging buffer
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
             memcpy(data, vertices.data(), (size_t) bufferSize);
         vkUnmapMemory(device, stagingBufferMemory);
-
+        
+        // Create vertex buffer
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
-
+        
+        // Copy data from staging buffer to vertex buffer
         copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
@@ -1000,18 +1046,22 @@ private:
 
     void createIndexBuffer() {
         VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
-
+        
+        // Create staging buffer
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
+        // Copy index data from CPU to staging buffer
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
             memcpy(data, indices.data(), (size_t) bufferSize);
         vkUnmapMemory(device, stagingBufferMemory);
-
+        
+        // Create index buffer
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
 
+        // Copy data from staging buffer to index buffer
         copyBuffer(stagingBuffer, indexBuffer, bufferSize);
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
@@ -1051,6 +1101,7 @@ private:
     }
 
     void createDescriptorSets() {
+        // Create multiple descriptorSetLayouts
         std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
         VkDescriptorSetAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1058,6 +1109,7 @@ private:
         allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
         allocInfo.pSetLayouts = layouts.data();
 
+        // DescriptorSet contains the layout and buffer instance for the uniform buffer
         descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
         if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate descriptor sets!");
@@ -1102,11 +1154,13 @@ private:
         bufferInfo.size = size;
         bufferInfo.usage = usage;
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
+        
+        // Create buffer instance
         if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to create buffer!");
         }
-
+        
+        // Allocate underlying memory for the created buffer
         VkMemoryRequirements memRequirements;
         vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
 
@@ -1118,7 +1172,8 @@ private:
         if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate buffer memory!");
         }
-
+        
+        // Bind memory to buffer
         vkBindBufferMemory(device, buffer, bufferMemory, 0);
     }
 
@@ -1297,6 +1352,7 @@ private:
         VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+            // Recreate all the swap chains as long as the window size changed
             recreateSwapChain();
             return;
         } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
